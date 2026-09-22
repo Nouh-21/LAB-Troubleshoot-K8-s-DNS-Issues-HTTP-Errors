@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wezva-core-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-server
+  template:
+    metadata:
+      labels:
+        app: web-server
+    spec:
+      containers:
+      # CONTAINER 1: The Gateway Proxy Engine (NGINX Router Sidecar)
+      - name: gateway-proxy
+        image: nginx:alpine
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          cat << 'EOF' > /etc/nginx/nginx.conf
+          events { worker_connections 1024; }
+          http {
+              server {
+                  listen 8080;
+                  location / {
+                      proxy_pass http://127.0.0.1:8081;
+                      proxy_read_timeout 3s;
+                      proxy_connect_timeout 3s;
+                  }
+              }
+          }
+          EOF
+          nginx -g "daemon off;"
+        ports:
+        - containerPort: 8080
+      
+      # CONTAINER 2: The Core Application Backend (Abruptly Exits)
+      - name: python-app
+        image: python:3.10-alpine
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          cat << 'EOF' > server.py
+          import http.server
+          import socketserver
+          import sys
+
+          class MyHandler(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  # Force the python process to instantly terminate mid-flight
+                  sys.exit(1)
+
+          socketserver.TCPServer.allow_reuse_address = True
+          print("App backend running on port 8081...")
+          with socketserver.TCPServer(("0.0.0.0", 8081), MyHandler) as httpd:
+              httpd.serve_forever()
+          EOF
+          python3 server.py
+        ports:
+        - containerPort: 8081
+
