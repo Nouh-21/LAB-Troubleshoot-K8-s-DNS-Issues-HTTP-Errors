@@ -46,7 +46,7 @@ metadata:
   name: wezva-service
 spec:
   selector:
-    app: wezva-app
+    app: wrong-app
   ports:
   - name: http
     port: 80
